@@ -37,6 +37,10 @@ def cadastroRestaurante(request):
 
     return render(request, 'cadastroRestaurante.html', { 'form': form})
                   
+logger = logging.getLogger(__name__)
+# Senha fornecida pelo rh
+ADMIN_PASSWORD = "Senha123"
+
 def cadastrar_usuario(request):
     if request.method == 'POST':
         username = request.POST.get('username')
@@ -44,42 +48,44 @@ def cadastrar_usuario(request):
         password = request.POST.get('password')
         confirm_password = request.POST.get('confirm_password')
         tipo = request.POST.get('tipo')
-
-
+        admin_password = request.POST.get('admin_password', '')
+        
+        # Validação básica
         if password != confirm_password:
             messages.error(request, 'As senhas não coincidem!')
             return redirect('cadastrar_usuario')
-
-        if User.objects.filter(username=username).exists():
-            messages.error(request, 'Nome de usuário já existe!')
-            return redirect('cadastrar_usuario')
-
-        if email and User.objects.filter(email=email).exists():
-            messages.error(request, 'E-mail já cadastrado!')
-            return redirect('cadastrar_usuario')
-
-
+        
+        # Verificação para cadastro de admin
+        if tipo == 'admin':
+            if admin_password != ADMIN_PASSWORD:
+                messages.error(request, 'Senha de administrador incorreta!')
+                return redirect('cadastrar_usuario')
+            
+            # Log de criação de admin
+            logger.info(f'Novo admin criado por {request.user.username}: {username}')
+            messages.success(request, 'Administrador criado com sucesso! Registro de auditoria gerado.')
+        
         try:
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                password=password
-            )
-
-
-            Profile.objects.create(
-                user=user,
-                tipo=tipo
-            )
-
-            messages.success(request, 'Usuário cadastrado com sucesso!')
-            return redirect('cadastrar_usuario') 
-
+            # Cria o usuário
+            user = User.objects.create_user(username, email, password)
+            
+            # Adiciona ao grupo conforme o tipo
+            if tipo == 'admin':
+                group = Group.objects.get(name='Administradores')  # Certifique-se que o grupo existe
+                user.is_staff = True
+            else:
+                group = Group.objects.get(name='Encarregados')  # Certifique-se que o grupo existe
+            
+            user.groups.add(group)
+            user.save()
+            
+            messages.success(request, 'Usuário criado com sucesso!')
+            return redirect('cadastrar_usuario.html')  # Redirecione para onde for apropriado
+            
         except Exception as e:
-            messages.error(request, f'Erro ao cadastrar usuário: {str(e)}')
-            return redirect('cadastrar_usuario')
+            messages.error(request, f'Erro ao criar usuário: {str(e)}')
+    
+    return render(request, 'cadastrar_usuario.html')  # Substitua pelo seu template
 
-
-    return render(request, 'cadastrar_usuario.html')
 
 
